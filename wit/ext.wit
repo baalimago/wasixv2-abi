@@ -87,15 +87,17 @@ interface ext {
   /// process, unless they are loaded already, links them, and writes the handle of `file`'s
   /// module to `handle`.
   ///
-  /// - `file` NULL is the main program. A `file` containing `/` is opened as is, relative to the
-  ///   working directory; otherwise each directory of `search-path` is tried in order.
-  /// - `search-path` is a colon-separated list, or NULL for none: libc passes `LD_LIBRARY_PATH`
-  ///   as read at startup, then the default directories. A needed module is searched in the
-  ///   needing module's runtime path, then in `search-path`. Every candidate is opened as
-  ///   `openat` would, with the process's credentials and working directory.
-  /// - `flags` are `RTLD_*`; linking is always immediate, so `RTLD_LAZY` acts as `RTLD_NOW`.
-  /// - `caller-addr` is an address in the calling module's data, such as its `__dso_handle`, or
-  ///   0 for the main module. It selects the module whose runtime path applies.
+  /// `file` NULL is the main program. A `file` containing `/` is opened as is, relative to the
+  /// working directory; otherwise each directory of `search-path` is tried in order.
+  ///
+  /// `search-path` is a colon-separated list, or NULL for none: libc passes `LD_LIBRARY_PATH` as
+  /// read at startup, then the default directories. A needed module is searched in the needing
+  /// module's runtime path, then in `search-path`. Every candidate is opened as `openat` would,
+  /// with the process's credentials and working directory.
+  ///
+  /// `flags` are `RTLD_*`; linking is always immediate, so `RTLD_LAZY` acts as `RTLD_NOW`.
+  /// `caller-addr` is an address in the calling module's data, such as its `__dso_handle`, or 0
+  /// for the main module. It selects the module whose runtime path applies.
   ///
   /// Constructors are not run: newly loaded modules are queued, in initialization order, for
   /// `dl-next-init`. On failure, writes a NUL-terminated message for `dlerror` into `err`.
