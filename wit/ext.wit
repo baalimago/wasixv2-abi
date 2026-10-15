@@ -1,10 +1,10 @@
 /// Wasm-specific primitives with no Linux syscall equivalent.
 ///
-/// Keep this small: anything Linux can express stays in `syscalls`. Functions marked TENTATIVE
-/// are placeholders whose shape is not settled; hosts may return `-ENOSYS` for them.
+/// Keep this small: anything Linux can express stays in `syscalls`. Hosts return `-ENOSYS` for
+/// extensions they do not implement yet.
 /// @module(wasixv2)
 interface ext {
-  use types.{buf, cstr, dl-flags, dl-handle, dl-handle-ptr, s32-ptr, u32-ptr, u64-ptr, ulong, uptr, uptr-ptr, slong, usize};
+  use types.{buf, call-dynamic-flags, const-buf, const-stack-snapshot-ptr, cstr, dl-flags, dl-handle, dl-handle-ptr, reflection-result-ptr, s32-ptr, stack-snapshot-ptr, u32-ptr, u64-ptr, ulong, uptr, uptr-ptr, slong, usize};
 
   // ==== Process startup ====
 
@@ -70,25 +70,116 @@ interface ext {
   /// Returns 0 or `-errno`.
   signal-callback-register: func(callback: u32) -> slong;
 
+  // ==== Function tables ====
+  //
+  // Calls and functions whose signatures are only known at run time, which wasm cannot express
+  // from the guest: what libffi needs. The C interface is wasix-libc's `wasix/call_dynamic.h`,
+  // `wasix/reflection.h` and `wasix/closure.h`. Functions are indices into the indirect function
+  // table; argument and result buffers hold values back to back, 4 bytes for i32 and f32, 8 for
+  // i64 and f64, and 16 for v128.
+
+  /// Calls the function at table index `function` with the arguments in `values`, writing its
+  /// results to `results`. Traps, exceptions and `longjmp`s from the callee pass through.
+  ///
+  /// With `CALL_DYNAMIC_STRICT`, both buffers must match the function's signature exactly, or the
+  /// call fails with `-EINVAL`. Without it, the call follows native calling conventions as far as
+  /// wasm allows: extra arguments are dropped, missing ones are zero, and missing results are
+  /// written as zero. The types of the arguments both sides have must still match, or the call
+  /// fails with `-EINVAL`. Returns 0 or `-errno`.
+  /// @slice(values, values-len)
+  /// @slice(results, results-len)
+  call-dynamic: func(
+    function: u32,
+    values: const-buf,
+    values-len: usize,
+    results: buf,
+    results-len: usize,
+    %flags: call-dynamic-flags,
+  ) -> slong;
+
+  /// Writes the signature of the function at table index `function`: its argument types to
+  /// `argument-types` and its result types to `result-types`, one `wasm-value-type` byte each, and
+  /// the counts to `result`. Returns 0; `-EINVAL` if `function` is not a function or has a type no
+  /// `wasm-value-type` describes; `-EOVERFLOW` if a buffer is too small, in which case only
+  /// `result` is written.
+  /// @slice(argument-types, argument-types-len)
+  /// @slice(result-types, result-types-len)
+  reflect-signature: func(
+    function: u32,
+    argument-types: buf,
+    argument-types-len: usize,
+    result-types: buf,
+    result-types-len: usize,
+    %result: reflection-result-ptr,
+  ) -> slong;
+
+  /// Reserves a table slot for a closure and writes its index to `closure`. Calling it before
+  /// `closure-prepare` traps. Returns 0 or `-errno`.
+  ///
+  /// Each function type has a pool of host-generated stub functions, compiled and instantiated
+  /// once per batch of stubs rather than per closure. Each stub reads its backing function and
+  /// environment from an array in linear memory that the host owns.
+  closure-allocate: func(closure: u32-ptr) -> slong;
+
+  /// Makes `closure` callable with the given signature: calling it packs its arguments into a
+  /// buffer and calls `backing(values: uptr, results: uptr, env: uptr)`, a table index, which
+  /// writes the results. `argument-types` and `result-types` are `wasm-value-type` bytes. The
+  /// host takes a free stub of that type, writes `backing` and `env` to its entry and places it
+  /// in the slot in every thread. A closure may be prepared again with another signature.
+  /// Returns 0 or `-errno`.
+  /// @slice(argument-types, argument-types-len)
+  /// @slice(result-types, result-types-len)
+  closure-prepare: func(
+    backing: u32,
+    closure: u32,
+    argument-types: const-buf,
+    argument-types-len: usize,
+    result-types: const-buf,
+    result-types-len: usize,
+    env: uptr,
+  ) -> slong;
+
+  /// Frees `closure`'s slot and returns its stub to its pool. Calling it afterwards traps.
+  /// Returns 0, or `-EINVAL` if `closure` is not an allocated closure.
+  closure-free: func(closure: u32) -> slong;
+
+  // ==== Checkpointing ====
+
+  /// Checkpoints the process: the host saves the guest's memory and its kernel state, and the
+  /// wasm call stack from the asyncify-instrumented functions that led to this call. Returns 0
+  /// when the checkpoint is taken, and 1 when the process is resumed from it, which is when it
+  /// must reseed randomness and reconnect what it needs. Returns `-ENOSYS` if the embedder has
+  /// not enabled checkpoints, and `-EINVAL` if a function on the call path is not instrumented,
+  /// so the stack cannot be captured. The C interface is `wasix_proc_checkpoint()`.
+  checkpoint: func() -> slong;
+
+  /// `setjmp` for the asyncify build configuration, where wasm exceptions are not available:
+  /// records the current call stack in `snapshot`. Returns 0, and later 1 when `stack-restore`
+  /// resumes it, with the value it was given written to `val`. Only for asyncify modules;
+  /// others get `-ENOSYS`. Returns 0, 1 or `-errno`.
+  stack-save: func(snapshot: stack-snapshot-ptr, val: s32-ptr) -> slong;
+
+  /// `longjmp` for the asyncify build configuration: resumes the `stack-save` that filled
+  /// `snapshot`, which returns 1 there with `val` written. Only for asyncify modules.
+  /// @noreturn
+  stack-restore: func(snapshot: const-stack-snapshot-ptr, val: s32);
+
   // ==== Coroutines ====
 
-  /// TENTATIVE. Creates a suspended coroutine context and writes its id to `id`. Its first
+  /// Creates a suspended coroutine context and writes its id to `id`. Its first
   /// resumption calls the function at table index `entry` (`fn()`) on a fresh wasm call stack; the
   /// guest provides the shadow stack. Carried over from wasixv1 (wasix-libc's `wasix/context.h`):
   /// greenlet uses it directly, and libc builds `makecontext` and `swapcontext` on top of it.
   /// Returns 0 or `-errno`.
-  /// @unsupported
   context-create: func(entry: u32, id: u64-ptr) -> slong;
 
-  /// TENTATIVE. Suspends the current context and resumes context `id`, from where it last
+  /// Suspends the current context and resumes context `id`, from where it last
   /// suspended or from its entry point. Returns 0 once another context switches back to this one,
   /// or `-errno`.
-  /// @unsupported
   context-switch: func(id: u64) -> slong;
 
-  /// TENTATIVE. Destroys a suspended or finished context and releases its resources. Destroying
+  /// Destroys a suspended or finished context and releases its resources. Destroying
   /// the current or the main context fails. Returns 0 or `-errno`.
-  /// @unsupported
   context-destroy: func(id: u64) -> slong;
 
   // ==== Dynamic linking ====
@@ -98,7 +189,7 @@ interface ext {
   // `__wasm_init_tls`, `__tls_size` and `__tls_align`. During a link the host calls only
   // functions wasm-ld synthesizes, never user code.
 
-  /// TENTATIVE. `dlopen`: loads `file` and the modules it needs into every instance of the
+  /// `dlopen`: loads `file` and the modules it needs into every instance of the
   /// process, unless they are loaded already, links them, and writes the handle of `file`'s
   /// module to `handle`.
   ///
@@ -121,7 +212,6 @@ interface ext {
   /// `dl-next-init`. On failure, writes a NUL-terminated message for `dlerror` into `err`.
   /// Returns 0 or `-errno`.
   /// @slice(err, err-len)
-  /// @unsupported
   dl-open: func(
     file: cstr,
     %flags: dl-flags,
@@ -132,7 +222,7 @@ interface ext {
     err-len: usize,
   ) -> slong;
 
-  /// TENTATIVE. `dlsym`: looks up `symbol` and writes its address to `addr`: a linear memory
+  /// `dlsym`: looks up `symbol` and writes its address to `addr`: a linear memory
   /// address for data, or a function-table index for a function, which is placed in the table of
   /// every instance if it is not there yet.
   ///
@@ -141,7 +231,6 @@ interface ext {
   /// `dl-open`. Symbol precedence and weak symbols follow ELF rules. On failure, writes a
   /// NUL-terminated message for `dlerror` into `err`. Returns 0 or `-errno`.
   /// @slice(err, err-len)
-  /// @unsupported
   dl-sym: func(
     handle: dl-handle,
     symbol: cstr,
@@ -151,18 +240,16 @@ interface ext {
     err-len: usize,
   ) -> slong;
 
-  /// TENTATIVE. `dlclose`: drops a reference to `handle`. Code is never unloaded. Returns 0, or
+  /// `dlclose`: drops a reference to `handle`. Code is never unloaded. Returns 0, or
   /// `-EINVAL` if `handle` is not a loaded module.
-  /// @unsupported
   dl-close: func(handle: dl-handle) -> slong;
 
-  /// TENTATIVE. Takes the next queued module whose constructors have not run, in initialization
+  /// Takes the next queued module whose constructors have not run, in initialization
   /// order, and writes the function-table index of its `__wasm_call_ctors` to `ctors`, or 0 if it
   /// has none. Returns 1 when it took a module, 0 when the queue is empty, or `-errno`.
   ///
   /// libc calls this until the queue is empty after every successful `dl-open`, and before
   /// `main` for the libraries loaded at startup, then calls each `ctors` function. No host lock is
   /// held then, so constructors may call `dlopen`; libc serializes loading with its own lock.
-  /// @unsupported
   dl-next-init: func(ctors: uptr-ptr) -> slong;
 }

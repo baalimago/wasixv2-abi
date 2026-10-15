@@ -6986,4 +6986,64 @@ interface types {
     /// @value(0x1000)
     rtld-nodelete,
   }
+
+  // ==== Function tables (wasixv2 extensions) ====
+
+  /// A wasm value type in `call-dynamic`, `reflect-signature` and `closure-prepare` (wasix-libc's
+  /// `wasix/value_type.h`, with v1's values).
+  /// @repr(u8)
+  enum wasm-value-type {
+    /// @value(0)
+    wasix-value-type-i32,
+    /// @value(1)
+    wasix-value-type-i64,
+    /// @value(2)
+    wasix-value-type-f32,
+    /// @value(3)
+    wasix-value-type-f64,
+    /// @value(4)
+    wasix-value-type-v128,
+  }
+
+  /// `call-dynamic` flags.
+  /// @repr(u32)
+  flags call-dynamic-flags {
+    /// Fail with `EINVAL` unless the buffers exactly match the function's signature.
+    /// @value(0x1)
+    call-dynamic-strict,
+  }
+
+  /// `reflect-signature`'s result (wasix-libc's `wasix_reflection_result_t`, v1's layout).
+  /// @size(6)
+  /// @align(2)
+  record reflection-result {
+    /// Non-zero if the signature at this table index never changes. Zero for closures, whose
+    /// slots are reused.
+    cacheable: u8,
+    /// Number of arguments the function takes.
+    arguments: u16,
+    /// Number of results it returns.
+    results: u16,
+  }
+
+  /// @ptr(mut reflection-result)
+  type reflection-result-ptr = uptr;
+
+  // ==== Checkpointing (wasixv2 extensions) ====
+
+  /// What `stack-save` records for `stack-restore` (v1's `__wasi_stack_snapshot_t` layout).
+  /// Opaque to the guest: the host fills it in.
+  /// @size(24)
+  /// @align(8)
+  record stack-snapshot {
+    user: u64,
+    hash-lower: u64,
+    hash-upper: u64,
+  }
+
+  /// @ptr(mut stack-snapshot)
+  type stack-snapshot-ptr = uptr;
+
+  /// @ptr(const stack-snapshot)
+  type const-stack-snapshot-ptr = uptr;
 }
