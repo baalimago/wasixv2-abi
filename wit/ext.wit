@@ -4,7 +4,7 @@
 /// are placeholders whose shape is not settled; hosts may return `-ENOSYS` for them.
 /// @module(wasixv2)
 interface ext {
-  use types.{buf, cstr, dl-flags, dl-handle, dl-handle-ptr, u32-ptr, u64-ptr, uptr, uptr-ptr, slong, usize};
+  use types.{buf, cstr, dl-flags, dl-handle, dl-handle-ptr, s32-ptr, u32-ptr, u64-ptr, ulong, uptr, uptr-ptr, slong, usize};
 
   // ==== Process startup ====
 
@@ -30,14 +30,23 @@ interface ext {
 
   // ==== Threads ====
 
-  /// TENTATIVE. Starts a new thread that calls the module's exported thread entry point
-  /// (in the style of `wasi_thread_start(tid, start-arg)`) with `start-arg`.
+  /// Starts a new thread: `clone` for the thread case, which cannot return twice in wasm.
   ///
-  /// This replaces `clone(CLONE_VM | CLONE_THREAD | ...)`, which cannot return twice in wasm.
-  /// The guest sets up the stack, TLS and `set_tid_address` itself from `start-arg`.
+  /// The kernel validates `flags` and creates the task as `clone(flags, newsp, parent-tid, tls,
+  /// child-tid)` does on Linux, so `CLONE_PARENT_SETTID`, `CLONE_CHILD_SETTID`,
+  /// `CLONE_CHILD_CLEARTID` and the sharing flags mean the same. `flags` must contain `CLONE_VM`,
+  /// `CLONE_FS`, `CLONE_FILES`, `CLONE_SIGHAND` and `CLONE_THREAD`; other forms are `-EINVAL`, and
+  /// forks go through `clone`. `CLONE_SETTLS` records `tls` as the thread pointer the new thread
+  /// starts with.
+  ///
+  /// The host then instantiates the module again on the same shared memory and calls its export
+  /// `wasixv2_thread_start(tid: s32, start-arg: uptr)` in the new thread. That entry point runs
+  /// before any guest state is set up: it must point `__stack_pointer` at the new thread's stack
+  /// and set up TLS before it touches either, all from what `start-arg` points to, which the
+  /// guest defines. The thread ends when it calls `exit` or `exit_group`; the entry point must
+  /// not return. A thread that returns from it or traps ends its thread group, as a fault does.
   /// Returns the new thread id or `-errno`.
-  /// @unsupported
-  thread-spawn: func(start-arg: uptr) -> slong;
+  thread-spawn: func(%flags: ulong, start-arg: uptr, parent-tid: s32-ptr, tls: uptr, child-tid: s32-ptr) -> slong;
 
   // ==== Signals ====
 
