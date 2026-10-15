@@ -791,8 +791,10 @@ interface syscalls {
   ///
   /// vfork (`CLONE_VM | CLONE_VFORK`) works in every build configuration. libc's `vfork` is a macro
   /// that calls `setjmp` first. The call returns 0, and the instance keeps running as the child task.
-  /// When the child's `execve` succeeds or it calls `exit` or `exit_group`, that call returns to the
-  /// guest as the parent with the child's pid, and libc `longjmp`s back to the vfork point.
+  /// When the child's `execve` succeeds, it calls `exit` or `exit_group`, or a signal kills it, the
+  /// instance runs as the parent again and the host calls the module's export
+  /// `wasixv2_vfork_return(child-tid: s32)` from within that call; libc `longjmp`s from there to the
+  /// vfork point, and the exception unwinds through the call. The exec'd child runs on its own.
   ///
   /// fork (no `CLONE_VM`) works only in the asyncify build configuration. The host unwinds the stack
   /// into linear memory, copies the memory for the child and rewinds both, so the call returns the
@@ -815,8 +817,9 @@ interface syscalls {
   clone3: func(uargs: const-clone-args-ptr, size: usize) -> slong;
 
   /// Kernel: `sys_execve(const char * filename, const char *const * argv, const char *const * envp)`.
-  /// Replaces process image; no return on success, except in a vfork child (see `clone`). argv/envp
-  /// are NULL-terminated arrays of 32-bit pointers.
+  /// Replaces process image; no return on success (a vfork child's parent resumes at its vfork point,
+  /// see `clone`). argv/envp are NULL-terminated arrays of 32-bit pointers; an empty argv gets an
+  /// empty argv[0]. The file must be a regular, executable wasm module or `#!` script.
   /// @nr(221)
   execve: func(filename: cstr, argv: cstr-array, envp: cstr-array) -> slong;
 
@@ -827,13 +830,14 @@ interface syscalls {
   execveat: func(fd: fd, filename: cstr, argv: cstr-array, envp: cstr-array, %flags: at-flags) -> slong;
 
   /// Kernel: `sys_exit(int error_code)`.
-  /// Exits only the calling thread. noreturn, except in a vfork child (see `clone`).
+  /// Exits only the calling thread. noreturn (a vfork child's parent resumes at its vfork point, see
+  /// `clone`).
   /// @nr(93)
   /// @noreturn
   exit: func(error-code: s32);
 
   /// Kernel: `sys_exit_group(int error_code)`.
-  /// noreturn, except in a vfork child (see `clone`).
+  /// noreturn (a vfork child's parent resumes at its vfork point, see `clone`).
   /// @nr(94)
   /// @noreturn
   exit-group: func(error-code: s32);
