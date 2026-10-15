@@ -253,6 +253,10 @@ impl<L, S: crate::Control> crate::Control for Layered<L, S> {
     fn take_pending(&self, task: crate::TaskId) -> Option<crate::GuestAction> {
         self.inner.take_pending(task)
     }
+
+    fn signal_return(&self, task: crate::TaskId, mask: Option<u64>) {
+        self.inner.signal_return(task, mask)
+    }
 }
 "#;
 

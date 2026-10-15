@@ -745,9 +745,9 @@ interface syscalls {
   rt-tgsigqueueinfo: func(tgid: pid, pid: pid, sig: signal, uinfo: const-siginfo-ptr) -> slong;
 
   /// Kernel: `sys_rt_sigreturn()`.
-  /// Not used: wasm has no register frame for the kernel to restore. libc's signal trampoline (see
-  /// `signal-callback-register`) calls the handler under `setjmp`, and libc's `rt_sigreturn` is the
-  /// matching `longjmp`. Hosts return `-ENOSYS`, so the import traps, since it is `@noreturn`.
+  /// Not used: wasm has no register frame for the kernel to restore. The return of libc's signal
+  /// trampoline (see `signal-callback-register`) is the sigreturn. Hosts return `-ENOSYS`, so the
+  /// import traps, since it is `@noreturn`.
   /// @nr(139)
   /// @noreturn
   /// @unsupported

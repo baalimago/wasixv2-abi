@@ -135,6 +135,9 @@ impl Gen<'_> {
         // Qualified, since method syntax would find `Arc::clone` before `Syscalls::clone`.
         let mut args = vec!["&*syscalls".to_string(), "&caller".to_string()];
         args.extend(m.params.iter().map(|p| self.arg(m, p)));
+        // The return-to-guest path answers `None` when a signal handler asks for the call to be
+        // restarted (`SA_RESTART`), so the call runs again with the same arguments.
+        self.line("loop {");
         let _ = writeln!(
             self.out,
             "let ret = Syscalls::{}({}).await;",
@@ -147,20 +150,28 @@ impl Gen<'_> {
                     Some(expr) => format!("ret.map(|v| {expr})"),
                     None => "ret".to_string(),
                 };
-                let _ = writeln!(self.out, "return_to_guest(&*syscalls, task, {ret})");
+                let _ = writeln!(
+                    self.out,
+                    "if let Some(ret) = return_to_guest(&env, &*syscalls, task, {ret}).await {{ return ret; }}"
+                );
             }
             None => {
                 // TODO: a vfork child's `exit`, `exit_group` and successful `execve` resume the
                 // parent, so the call returns to the guest; the return path needs a
                 // `GuestAction` for that instead of this trap.
-                self.line("return_to_guest(&*syscalls, task, ret.map(|()| 0))?;");
+                self.line(
+                    "if let Some(ret) = return_to_guest(&env, &*syscalls, task, ret.map(|()| 0)).await {",
+                );
+                self.line("ret?;");
                 let _ = writeln!(
                     self.out,
-                    "Err(RuntimeError::new(\"`{}` returned to the guest\"))",
+                    "return Err(RuntimeError::new(\"`{}` returned to the guest\"));",
                     m.f.import_name
                 );
+                self.line("}");
             }
         }
+        self.line("}");
         self.line("}");
     }
 
@@ -208,12 +219,12 @@ mod tests {
             "imports.define(IMPORT_MODULE, \"exit_group\", Function::new_typed_with_env_async(store, env, exit_group::<S>));",
             "async fn read<S>(env: AsyncFunctionEnvMut<ExecEnv<S>>, fd: i32, buf: i32, count: i32) -> Result<i32, RuntimeError>",
             "let ret = Syscalls::read(&*syscalls, &caller, Fd(fd), UserSliceMut::new(buf as u32, count as u32)).await;",
-            "return_to_guest(&*syscalls, task, ret.map(|v| v as i32))",
+            "if let Some(ret) = return_to_guest(&env, &*syscalls, task, ret.map(|v| v as i32)).await { return ret; }",
             "let ret = Syscalls::openat(&*syscalls, &caller, Fd(dfd), Cstr::new(path as u32), mode as u32, pos).await;",
-            "return_to_guest(&*syscalls, task, ret.map(|v| v.0))",
+            "if let Some(ret) = return_to_guest(&env, &*syscalls, task, ret.map(|v| v.0)).await { return ret; }",
             "async fn exit_group<S>(env: AsyncFunctionEnvMut<ExecEnv<S>>, error_code: i32) -> Result<(), RuntimeError>",
-            "Err(RuntimeError::new(\"`exit_group` returned to the guest\"))",
-            "return_to_guest(&*syscalls, task, ret)\n",
+            "return Err(RuntimeError::new(\"`exit_group` returned to the guest\"));",
+            "if let Some(ret) = return_to_guest(&env, &*syscalls, task, ret).await { return ret; }\n",
             "async fn lseek<S>(env: AsyncFunctionEnvMut<ExecEnv<S>>, fd: i32, offset: i64, whence: i32) -> Result<i64, RuntimeError>",
             "use wasixv2_abi::{Cstr, Fd};",
             "use wasixv2_syscalls::{Caller, Control, Syscalls, TaskId, UserSliceMut};",

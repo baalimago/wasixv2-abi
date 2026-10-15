@@ -50,18 +50,24 @@ interface ext {
 
   // ==== Signals ====
 
-  /// TENTATIVE. Registers libc's signal trampoline for this thread, as an index into the module's
+  /// Registers libc's signal trampoline for the thread group, as an index into the module's
   /// indirect function table, with the signature `fn(signo: s32, info: siginfo-ptr, uctx: void-ptr)`.
+  /// Threads and `fork` children inherit it; `execve` clears it. Until it is registered, signals
+  /// take their default action even when a handler is installed.
   ///
-  /// To deliver a signal, the kernel writes the `siginfo` and a small `ucontext` below the current
-  /// shadow stack pointer, or on the alternate stack set with `sigaltstack`, and calls the
-  /// trampoline on top of the interrupted wasm call stack, which stays intact. `mcontext_t` holds
-  /// only guest state a handler can clobber, such as the shadow stack pointer and the TLS base.
-  /// The trampoline calls the handler under `setjmp`; libc's `rt_sigreturn` is the matching
-  /// `longjmp`, after which the trampoline restores that state and returns to the host. A
-  /// `siglongjmp` out of the handler unwinds through the host frames as a wasm exception.
+  /// To deliver a signal, the host writes a `ucontext_t` (816 bytes, 16-aligned) and above it the
+  /// `siginfo_t` (128 bytes) below the module's `__stack_pointer`, or at the top of the alternate
+  /// stack set with `sigaltstack` for an `SA_ONSTACK` handler, points `__stack_pointer` below the
+  /// frame, and calls the trampoline on top of the interrupted wasm call stack, which stays intact.
+  /// The `ucontext_t` has libc's riscv32-shaped layout: `uc_stack` at 8 holds the alternate stack
+  /// settings, `uc_sigmask` at 20 the mask to restore, and `uc_mcontext` at 160 starts with four
+  /// `ulong` slots: the handler (`sa_handler`, a table index), `sa_flags`, and the interrupted
+  /// `__stack_pointer` and `__tls_base`. The trampoline calls the handler with one argument, or
+  /// with three when `SA_SIGINFO` is set, and returns. That return is `rt_sigreturn`: the host
+  /// then sets the signal mask from `uc_sigmask` and the two globals from the `mcontext` slots.
+  /// A `siglongjmp` out of the handler unwinds through the host frames as a wasm exception, and
+  /// leaves the mask to `siglongjmp`.
   /// Returns 0 or `-errno`.
-  /// @unsupported
   signal-callback-register: func(callback: u32) -> slong;
 
   // ==== Coroutines ====
