@@ -257,6 +257,10 @@ impl<L, S: crate::Control> crate::Control for Layered<L, S> {
     fn signal_return(&self, task: crate::TaskId, mask: Option<u64>) {
         self.inner.signal_return(task, mask)
     }
+
+    fn take_image(&self, task: crate::TaskId) -> Option<Vec<u8>> {
+        self.inner.take_image(task)
+    }
 }
 "#;
 
