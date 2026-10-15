@@ -94,8 +94,8 @@ interface ext {
   ///   needing module's runtime path, then in `search-path`. Every candidate is opened as
   ///   `openat` would, with the process's credentials and working directory.
   /// - `flags` are `RTLD_*`; linking is always immediate, so `RTLD_LAZY` acts as `RTLD_NOW`.
-  /// - `caller-addr` is an address in the calling module's data, such as its `__dso_handle`, or 0 for
-  ///   the main module. It selects the module whose runtime path applies.
+  /// - `caller-addr` is an address in the calling module's data, such as its `__dso_handle`, or
+  ///   0 for the main module. It selects the module whose runtime path applies.
   ///
   /// Constructors are not run: newly loaded modules are queued, in initialization order, for
   /// `dl-next-init`. On failure, writes a NUL-terminated message for `dlerror` into `err`.
@@ -117,9 +117,9 @@ interface ext {
   /// every instance if it is not there yet.
   ///
   /// `handle` is a module, searched with its dependencies; `RTLD_DEFAULT`, the global scope; or
-  /// `RTLD_NEXT`, the global scope after the caller's module. `caller-addr` is as for `dl-open`. Symbol
-  /// precedence and weak symbols follow ELF rules. On failure, writes a NUL-terminated message
-  /// for `dlerror` into `err`. Returns 0 or `-errno`.
+  /// `RTLD_NEXT`, the global scope after the caller's module. `caller-addr` is as for
+  /// `dl-open`. Symbol precedence and weak symbols follow ELF rules. On failure, writes a
+  /// NUL-terminated message for `dlerror` into `err`. Returns 0 or `-errno`.
   /// @slice(err, err-len)
   /// @unsupported
   dl-sym: func(
