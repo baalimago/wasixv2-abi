@@ -1,7 +1,25 @@
-# wasixv2 definitions
+# wasixv2-abi
 
-The Linux syscall ABI for wasm32 guests, written as annotated WIT. `wasixv2-codegen` reads these
-files with `wit-parser` only; nothing here uses the component model.
+The wasixv2 guest ABI: the Linux syscall ABI for wasm32 guests, written as annotated WIT. This
+repository holds only the definitions. It is a git submodule of its consumers, which generate code
+from it with `wasixv2-codegen`:
+
+- [wasmer](https://github.com/wasmerio/wasmer) mounts it at `lib/wasixv2/codegen/wit`. The
+  generator lives there (`lib/wasixv2/codegen`), as does the host-side Rust it generates
+  (`wasixv2-abi`, `wasixv2-syscalls`, `wasixv2-exec`).
+- [libc2](https://github.com/wasix-org/libc2) mounts it at `wasix2/abi`. The C glue generated from
+  it is committed there.
+
+Generated code lives in the consumers, never here. A change to these files lands here first; each
+consumer then bumps its submodule pointer and regenerates in the same commit. From a wasmer
+checkout:
+
+```sh
+WASIXV2_CODEGEN_BLESS=1 cargo test -p wasixv2-codegen --test generated
+cargo run -p wasixv2-codegen -- c --wit <libc2>/wasix2/abi --libc <libc2>
+```
+
+`wasixv2-codegen` reads these files with `wit-parser` only; nothing here uses the component model.
 
 - `types.wit` (`interface types`): scalar and pointer aliases, kernel structs and unions, and
   constant families.
