@@ -21,4 +21,6 @@ clap = { version = "4.5.53", default-features = false, features = [
   "usage",
   "error-context",
 ] }
-wit-parser = { version = "0.259.0", default-features = false, features = ["std"] }
+wit-parser = { version = "0.259.0", default-features = false, features = [
+  "std",
+] }
