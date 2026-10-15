@@ -4,7 +4,7 @@
 /// are placeholders whose shape is not settled; hosts may return `-ENOSYS` for them.
 /// @module(wasixv2)
 interface ext {
-  use types.{buf, cstr, u32-ptr, u64-ptr, uptr, uptr-ptr, slong, usize};
+  use types.{buf, cstr, dl-flags, dl-handle, dl-handle-ptr, u32-ptr, u64-ptr, uptr, uptr-ptr, slong, usize};
 
   // ==== Process startup ====
 
@@ -77,26 +77,72 @@ interface ext {
   context-destroy: func(id: u64) -> slong;
 
   // ==== Dynamic linking ====
+  //
+  // The host instantiates and links side modules; libc2 decides policy and runs constructors.
+  // See "Dynamic linking" in wasmer's lib/wasixv2/DESIGN.md. Side modules must export
+  // `__wasm_init_tls`, `__tls_size` and `__tls_align`. During a link the host calls only
+  // functions wasm-ld synthesizes, never user code.
 
-  /// TENTATIVE. Loads the side module at `path` with `RTLD_*` `flags`, instantiates it against
-  /// this process's memory and indirect function table, links it, and writes its handle to
-  /// `handle`. A wasm guest cannot instantiate modules itself, so this replaces the userspace
-  /// dynamic loader's mapping step. On failure, writes a NUL-terminated `dlerror` message into
-  /// `err` and returns `-errno`. Returns 0 or `-errno`.
-  /// @slice(err, err-len)
-  /// @unsupported
-  dl-open: func(path: cstr, %flags: s32, err: buf, err-len: usize, handle: u32-ptr) -> slong;
-
-  /// TENTATIVE. Looks up `symbol` in the module `handle` and writes its address to `addr`: an
-  /// index into the indirect function table for a function, or a linear memory address for data.
-  /// On failure, writes a NUL-terminated `dlerror` message into `err` and returns `-errno`.
+  /// TENTATIVE. `dlopen`: loads `file` and the modules it needs into every instance of the
+  /// process, unless they are loaded already, links them, and writes the handle of `file`'s
+  /// module to `handle`.
+  ///
+  /// - `file` NULL is the main program. A `file` containing `/` is opened as is, relative to the
+  ///   working directory; otherwise each directory of `search-path` is tried in order.
+  /// - `search-path` is a colon-separated list, or NULL for none: libc passes `LD_LIBRARY_PATH`
+  ///   as read at startup, then the default directories. A needed module is searched in the
+  ///   needing module's runtime path, then in `search-path`. Every candidate is opened as
+  ///   `openat` would, with the process's credentials and working directory.
+  /// - `flags` are `RTLD_*`; linking is always immediate, so `RTLD_LAZY` acts as `RTLD_NOW`.
+  /// - `caller` is an address in the calling module's data, such as its `__dso_handle`, or 0 for
+  ///   the main module. It selects the module whose runtime path applies.
+  ///
+  /// Constructors are not run: newly loaded modules are queued, in initialization order, for
+  /// `dl-next-init`. On failure, writes a NUL-terminated message for `dlerror` into `err`.
   /// Returns 0 or `-errno`.
   /// @slice(err, err-len)
   /// @unsupported
-  dl-sym: func(handle: u32, symbol: cstr, err: buf, err-len: usize, addr: uptr-ptr) -> slong;
+  dl-open: func(
+    file: cstr,
+    %flags: dl-flags,
+    search-path: cstr,
+    caller: uptr,
+    handle: dl-handle-ptr,
+    err: buf,
+    err-len: usize,
+  ) -> slong;
 
-  /// TENTATIVE. Drops a reference to the module `handle`. Wasm cannot unload an instance's code,
-  /// so the module stays linked until the process exits. Returns 0 or `-errno`.
+  /// TENTATIVE. `dlsym`: looks up `symbol` and writes its address to `addr`: a linear memory
+  /// address for data, or a function-table index for a function, which is placed in the table of
+  /// every instance if it is not there yet.
+  ///
+  /// `handle` is a module, searched with its dependencies; `RTLD_DEFAULT`, the global scope; or
+  /// `RTLD_NEXT`, the global scope after `caller`'s module. `caller` is as for `dl-open`. Symbol
+  /// precedence and weak symbols follow ELF rules. On failure, writes a NUL-terminated message
+  /// for `dlerror` into `err`. Returns 0 or `-errno`.
+  /// @slice(err, err-len)
   /// @unsupported
-  dl-close: func(handle: u32) -> slong;
+  dl-sym: func(
+    handle: dl-handle,
+    symbol: cstr,
+    caller: uptr,
+    addr: uptr-ptr,
+    err: buf,
+    err-len: usize,
+  ) -> slong;
+
+  /// TENTATIVE. `dlclose`: drops a reference to `handle`. Code is never unloaded. Returns 0, or
+  /// `-EINVAL` if `handle` is not a loaded module.
+  /// @unsupported
+  dl-close: func(handle: dl-handle) -> slong;
+
+  /// TENTATIVE. Takes the next queued module whose constructors have not run, in initialization
+  /// order, and writes the function-table index of its `__wasm_call_ctors` to `ctors`, or 0 if it
+  /// has none. Returns 1 when it took a module, 0 when the queue is empty, or `-errno`.
+  ///
+  /// libc calls this until the queue is empty after every successful `dl-open`, and before
+  /// `main` for the libraries loaded at startup, then calls each `ctors` function. No host lock is
+  /// held then, so constructors may call `dlopen`; libc serializes loading with its own lock.
+  /// @unsupported
+  dl-next-init: func(ctors: uptr-ptr) -> slong;
 }

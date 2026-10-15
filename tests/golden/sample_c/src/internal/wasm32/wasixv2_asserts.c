@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #define _LARGEFILE64_SOURCE
 #include <dirent.h>
+#include <dlfcn.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>

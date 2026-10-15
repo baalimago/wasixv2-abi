@@ -6942,4 +6942,48 @@ interface types {
     /// @value(0x8)
     fspick-empty-path,
   }
+
+  // ==== Dynamic linking (wasixv2 extensions) ====
+
+  /// A loaded module, as `dlopen` returns it. In C it is a `void *`.
+  /// @c(void *)
+  /// @newtype
+  type dl-handle = u32;
+
+  /// @ptr(mut dl-handle)
+  /// @c(void **)
+  type dl-handle-ptr = uptr;
+
+  /// The special `dlsym` handles (`dlfcn.h`). They are pointers in C, so their values are not
+  /// checked against the headers.
+  /// @repr(u32)
+  /// @c(void *)
+  enum dl-special-handle {
+    /// The global scope: the main module, then `RTLD_GLOBAL` modules in load order.
+    /// @value(0x0)
+    /// @c-skip
+    rtld-default,
+    /// The modules after the caller's in the global scope.
+    /// @value(0xffffffff)
+    /// @c-skip
+    rtld-next,
+  }
+
+  /// `dlopen` modes (`dlfcn.h`), with musl's values.
+  /// @repr(u32)
+  /// @c(int)
+  flags dl-flags {
+    /// @value(0x0)
+    rtld-local,
+    /// @value(0x1)
+    rtld-lazy,
+    /// @value(0x2)
+    rtld-now,
+    /// @value(0x4)
+    rtld-noload,
+    /// @value(0x100)
+    rtld-global,
+    /// @value(0x1000)
+    rtld-nodelete,
+  }
 }

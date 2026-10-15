@@ -36,6 +36,7 @@ const NR_ALIASES: &[(&str, &str)] = &[("futex", "futex_time64")];
 /// Public musl headers the layout and constant asserts are checked against.
 const ASSERT_HEADERS: &[&str] = &[
     "dirent.h",
+    "dlfcn.h",
     "elf.h",
     "errno.h",
     "fcntl.h",

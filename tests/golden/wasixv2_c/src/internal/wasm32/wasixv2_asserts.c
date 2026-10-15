@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #define _LARGEFILE64_SOURCE
 #include <dirent.h>
+#include <dlfcn.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -104,6 +105,7 @@ __WXV2_LAYOUT(const gid_t *, 4, 4);
 __WXV2_LAYOUT(short, 2, 2);
 __WXV2_LAYOUT(uint64_t, 8, 8);
 __WXV2_LAYOUT(uint32_t, 4, 4);
+__WXV2_LAYOUT(void **, 4, 4);
 
 __WXV2_LAYOUT(struct statx_timestamp, 16, 8);
 __WXV2_OFFSET(struct statx_timestamp, tv_sec, 0);
@@ -6973,4 +6975,24 @@ __WXV2_CONST(FSPICK_NO_AUTOMOUNT, 0x4);
 #endif
 #ifdef FSPICK_EMPTY_PATH
 __WXV2_CONST(FSPICK_EMPTY_PATH, 0x8);
+#endif
+
+/* dl-flags */
+#ifdef RTLD_LOCAL
+__WXV2_CONST(RTLD_LOCAL, 0x0);
+#endif
+#ifdef RTLD_LAZY
+__WXV2_CONST(RTLD_LAZY, 0x1);
+#endif
+#ifdef RTLD_NOW
+__WXV2_CONST(RTLD_NOW, 0x2);
+#endif
+#ifdef RTLD_NOLOAD
+__WXV2_CONST(RTLD_NOLOAD, 0x4);
+#endif
+#ifdef RTLD_GLOBAL
+__WXV2_CONST(RTLD_GLOBAL, 0x100);
+#endif
+#ifdef RTLD_NODELETE
+__WXV2_CONST(RTLD_NODELETE, 0x1000);
 #endif
