@@ -1,114 +1,40 @@
 # wasixv2-abi
 
-The wasixv2 guest ABI: the Linux syscall ABI for wasm32 guests, written as annotated WIT. This
-repository holds only the definitions. It is a git submodule of its consumers, which generate code
-from it with `wasixv2-codegen`:
+The wasixv2 guest ABI, the Linux syscall ABI for wasm32 guests, and the generator for its
+bindings.
 
-- [wasmer](https://github.com/wasmerio/wasmer) mounts it at `lib/wasixv2/codegen/wit`. The
-  generator lives there (`lib/wasixv2/codegen`), as does the host-side Rust it generates
-  (`wasixv2-abi`, `wasixv2-syscalls`, `wasixv2-exec`).
-- [libc2](https://github.com/wasix-org/libc2) mounts it at `wasix2/abi`. The C glue generated from
-  it is committed there.
+- `wit/`: the ABI, written as annotated WIT. [`wit/README.md`](wit/README.md) describes the
+  conventions and every annotation.
+- `src/`: `wasixv2-codegen`, which reads the WIT and generates the host-side Rust (the ABI types,
+  the `Syscalls` trait and the wasm import shims) and the musl C glue.
+- `tests/`: golden tests for the generator, including a snapshot of the C glue for the real ABI,
+  so that an ABI change shows up in review as a C diff.
 
-Generated code lives in the consumers, never here. A change to these files lands here first; each
-consumer then bumps its submodule pointer and regenerates in the same commit. From a wasmer
-checkout:
+This repository is a git submodule of its consumers. Generated code is committed in the
+consumers, never here:
+
+- [wasmer](https://github.com/wasmerio/wasmer) mounts it at `lib/wasixv2/codegen`, where it is a
+  member of the cargo workspace. wasmer's `lib/wasixv2/abi/tests/generated.rs` checks that its
+  generated crates match the WIT at the pinned commit.
+- [libc2](https://github.com/wasix-org/libc2) mounts it at `wasix2/abi`.
+
+## Changing the ABI
+
+An ABI change lands here first. Each consumer then bumps its submodule to the same commit and
+regenerates in the same commit as the bump. Keep the two pins in step: wasmer and libc2 only
+interoperate when they were generated from the same ABI.
+
+From a wasmer checkout:
 
 ```sh
-WASIXV2_CODEGEN_BLESS=1 cargo test -p wasixv2-codegen --test generated
-cargo run -p wasixv2-codegen -- c --wit <libc2>/wasix2/abi --libc <libc2>
+WASIXV2_CODEGEN_BLESS=1 cargo test -p wasixv2-abi --test generated
 ```
 
-`wasixv2-codegen` reads these files with `wit-parser` only; nothing here uses the component model.
+From a libc2 checkout:
 
-- `types.wit` (`interface types`): scalar and pointer aliases, kernel structs and unions, and
-  constant families.
-- `syscalls.wit` (`interface syscalls`): one function per riscv32 syscall.
-- `ext.wit` (`interface ext`): wasm-specific primitives.
+```sh
+cargo run --manifest-path wasix2/abi/Cargo.toml -- c --wit wasix2/abi/wit --libc .
+```
 
-Both function interfaces use the single import module `wasixv2`. Import names are the snake form
-of the function names (`exit_group`, `startup_get`), so a syscall and an extension must not share
-a name; the generator rejects collisions.
-
-These files are the source of truth. Edit them by hand.
-
-## ABI
-
-- riscv32 is the reference: asm-generic, ILP32, time64 only. Its struct layouts are
-  byte-identical to wasm32.
-- Syscalls mirror Linux: the riscv32 table name is the import name, and the arguments and
-  semantics are the same. The return value is a Linux `long`, either a value or `-errno`.
-- Arguments that riscv32 splits into register pairs are a single `s64`/`u64` parameter here.
-  This also covers the `pos_l`/`pos_h` pair of `preadv`/`pwritev`/`preadv2`/`pwritev2`.
-- riscv32 is the reference, not a copy. Where it works around 32-bit registers, the import uses
-  the 64-bit form instead: `lseek` takes and returns an `s64` (riscv32 has only `llseek`), and
-  `mmap` takes a byte offset (riscv32 has only `mmap2`, which counts 4096-byte units). Both keep
-  riscv32's numbers.
-- Records describe the layout the kernel sees, because that is what the host implements.
-  `@c` names the type that musl passes to the syscall, where one matches.
-- Four syscalls are omitted: `lookup_dcookie` (18) and `nfsservctl` (42), which are
-  `sys_ni_syscall` stubs, and the riscv-specific `riscv_hwprobe` (258) and
-  `riscv_flush_icache` (259). Defining `SYS_riscv_flush_icache` would make musl build its
-  riscv-only icache code.
-
-## Naming
-
-- Identifiers are kebab-case. Converting kebab to snake gives the Linux C name (`stx-mode` ->
-  `stx_mode`), and converting to SCREAMING_SNAKE gives a constant name (`o-creat` -> `O_CREAT`).
-- WIT keywords are escaped with `%` (`%flags`, `%type`, `%list`).
-- A Linux name that kebab-case cannot represent keeps its exact spelling in `@c-name(...)` on
-  fields and `@name(...)` on constants, for example `__WALL` or `_NSIG`.
-- Kernel-internal names drop their leading underscores. For example, `__kernel_timespec`
-  becomes `kernel-timespec`.
-- Pointer aliases are named `T-ptr` (mutable), `const-T-ptr`, `T-array` and `const-T-array`.
-
-## Annotations
-
-wit-parser turns every comment directly in front of an item into that item's docs. A doc line
-whose trimmed text starts with `@` is an annotation. All other lines are free text. Unknown
-annotations are an error.
-
-A line starting with `====` is a section divider. The divider comments
-(`// ==== Sockets ====`) attach to the first item of each section, and generators drop them.
-
-| Annotation | On | Meaning |
-| --- | --- | --- |
-| `@c(<C type>)` | alias, record, enum, flags | The C type musl uses, for example `@c(struct statx)` or `@c(pid_t)`. |
-| `@kernel-only` | record | musl has no layout-compatible type. Either musl's type differs and musl converts it (`rusage`, `msqid64-ds`), or musl's type is a larger prefix-compatible superset (`termios`, `sysinfo`, `sched-param`, `sigset`). Do not assert this layout against musl. |
-| `@pointer-sized` | alias | The width is the target pointer width. WIT declares the wasm32 width. |
-| `@newtype` | alias of an integer | Rust backends emit a distinct `#[repr(transparent)]` struct (`pub struct Fd(pub i32)`) instead of a type alias, so values of this type cannot be mixed up with plain integers. Used on `fd`. C sees the plain integer. |
-| `@ptr(const T)`, `@ptr(mut T)` | alias of `uptr` | A guest pointer to `T`. `T` can be a type name, a primitive, `void`, or `T[]` for an array. |
-| `@nullable` | pointer alias | The pointer may be NULL. Not used yet: nullability is per argument, so the function docs describe it. |
-| `@union` | record | All fields are at offset 0. |
-| `@size(N)`, `@align(N)` | record | The riscv32 layout. Generators assert it. Every record has both. |
-| `@repr(T)` | enum, flags | The integer type of the constant family. |
-| `@abi-error` | enum | The errno family whose values syscalls return negated (`-errno`). At most one enum has it, and its `@repr` must be signed. Used on `errno`. |
-| `@value(N)` | enum case, flags member | The value, in decimal or `0x` hex, and possibly negative. Flags members carry the full mask, not a bit index. Aliases may share a value. |
-| `@name(C_NAME)` | enum case, flags member | The exact C name, when it is not the SCREAMING_SNAKE form of the case name. |
-| `@c-name(c_name)` | record field | The exact C field name, when it is not the snake form of the field name. |
-| `@c-skip` | record field, enum case, flags member | No C assert for this item: musl's type has no such member, or musl intentionally uses a different value (and translates). The docs say why. |
-| `@c-enum` | enum, flags | musl defines the members as C enumerators, not macros. Their C asserts are not guarded by `#ifdef`. |
-| `@module(name)` | interface | The wasm import module. |
-| `@nr(N)` | syscall | The riscv32 syscall number. |
-| `@sys-name(name)` | syscall | The musl `SYS_` suffix, when it differs from the import name. |
-| `@merged-i64(param[, hi-lo])` | syscall | Linux passes `param` as two 32-bit halves. The default order is `lo-hi`. |
-| `@c-one-slot(param)` | syscall | musl passes this 64-bit `param` in one `long` argument slot, not two, so the C glue sign-extends it. Used where musl calls a syscall that only exists on 64-bit Linux (`lseek`, `mmap`); libc calls the import directly for values beyond 32 bits. |
-| `@noreturn` | function | The function never returns, so it has no result (`exit`, `exit_group`, `rt_sigreturn`). |
-| `@unsupported` | function | Declared for completeness. Hosts may return `-ENOSYS`. |
-| `@c-param(name: C type)` | function | Overrides the C prototype type of one parameter. |
-| `@import(name)` | function | Overrides the wasm import name. By default it is the snake form of the function name. |
-| `@slice(ptr, len)` | function | `ptr` is a byte buffer (`u8` or `void` pointee) and `len` its unsigned length in bytes. The Rust `Syscalls` method takes one `UserSlice` (const pointee) or `UserSliceMut` (mut pointee) named after `ptr` instead of the two params. Only for lengths that count bytes of exactly that buffer; signed lengths (`readlinkat`'s `bufsiz`) stay separate because a negative value means `EINVAL`. Repeatable. |
-| `@returns(T)` | function | The Rust `Syscalls` method returns `SysResult<T>` instead of the raw result type, for example `u32` for byte counts or `fd` for new descriptors. `T` is a scalar no wider than the result; the import shim converts it back. |
-
-The Rust backends require every function without a result to be `@noreturn`; its `Syscalls`
-method returns `SysResult<()>` and the import shim traps if it returns to the guest.
-
-Functions cannot document individual parameters, because wit-parser drops comments on
-parameters. Notes about a parameter go in the function docs. A command-dependent argument is
-typed `ulong`, and the function docs explain it.
-
-## Validation
-
-`wasixv2-codegen` parses these files, computes C layouts and checks every `@size`/`@align`.
-The definitions were cross-checked against clang record-layout dumps of the Linux UAPI headers
-and of musl's riscv32 headers.
+Here, `cargo test` runs the generator's own tests, and `WASIXV2_CODEGEN_BLESS=1 cargo test`
+rewrites its golden files.

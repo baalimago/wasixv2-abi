@@ -1,0 +1,24 @@
+[package]
+name = "wasixv2-codegen"
+version = "0.0.0"
+description = "The wasixv2 guest ABI in WIT, and the generator for its Rust and C bindings"
+publish = false
+authors = ["Wasmer Engineering Team <engineering@wasmer.io>"]
+edition = "2024"
+homepage = "https://wasmer.io/"
+license = "MIT"
+repository = "https://github.com/wasix-org/wasixv2-abi"
+rust-version = "1.96"
+
+# Also a member of wasmer's workspace, where this is mounted at lib/wasixv2/codegen. Dependency
+# requirements match wasmer's, so that workspace resolves them without changes.
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5.53", default-features = false, features = [
+  "derive",
+  "std",
+  "help",
+  "usage",
+  "error-context",
+] }
+wit-parser = { version = "0.259.0", default-features = false, features = ["std"] }
