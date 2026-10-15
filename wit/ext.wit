@@ -94,7 +94,7 @@ interface ext {
   ///   needing module's runtime path, then in `search-path`. Every candidate is opened as
   ///   `openat` would, with the process's credentials and working directory.
   /// - `flags` are `RTLD_*`; linking is always immediate, so `RTLD_LAZY` acts as `RTLD_NOW`.
-  /// - `caller` is an address in the calling module's data, such as its `__dso_handle`, or 0 for
+  /// - `caller-addr` is an address in the calling module's data, such as its `__dso_handle`, or 0 for
   ///   the main module. It selects the module whose runtime path applies.
   ///
   /// Constructors are not run: newly loaded modules are queued, in initialization order, for
@@ -106,7 +106,7 @@ interface ext {
     file: cstr,
     %flags: dl-flags,
     search-path: cstr,
-    caller: uptr,
+    caller-addr: uptr,
     handle: dl-handle-ptr,
     err: buf,
     err-len: usize,
@@ -117,7 +117,7 @@ interface ext {
   /// every instance if it is not there yet.
   ///
   /// `handle` is a module, searched with its dependencies; `RTLD_DEFAULT`, the global scope; or
-  /// `RTLD_NEXT`, the global scope after `caller`'s module. `caller` is as for `dl-open`. Symbol
+  /// `RTLD_NEXT`, the global scope after the caller's module. `caller-addr` is as for `dl-open`. Symbol
   /// precedence and weak symbols follow ELF rules. On failure, writes a NUL-terminated message
   /// for `dlerror` into `err`. Returns 0 or `-errno`.
   /// @slice(err, err-len)
@@ -125,7 +125,7 @@ interface ext {
   dl-sym: func(
     handle: dl-handle,
     symbol: cstr,
-    caller: uptr,
+    caller-addr: uptr,
     addr: uptr-ptr,
     err: buf,
     err-len: usize,
