@@ -16,7 +16,7 @@ consumers, never here:
 - [wasmer](https://github.com/wasmerio/wasmer) mounts it at `lib/wasixv2/codegen`, where it is a
   member of the cargo workspace. wasmer's `lib/wasixv2/abi/tests/generated.rs` checks that its
   generated crates match the WIT at the pinned commit.
-- [libc2](https://github.com/wasix-org/libc2) mounts it at `wasix2/abi`.
+- [libc2](https://github.com/wasix-org/libc2) mounts it at `wasixv2/abi`.
 
 ## Changing the ABI
 
@@ -33,7 +33,7 @@ WASIXV2_CODEGEN_BLESS=1 cargo test -p wasixv2-abi --test generated
 From a libc2 checkout:
 
 ```sh
-cargo run --manifest-path wasix2/abi/Cargo.toml -- c --wit wasix2/abi/wit --libc .
+cargo run --manifest-path wasixv2/abi/Cargo.toml -- c --wit wasixv2/abi/wit --libc .
 ```
 
 Here, `cargo test` runs the generator's own tests, and `WASIXV2_CODEGEN_BLESS=1 cargo test`
