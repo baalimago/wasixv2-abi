@@ -258,7 +258,7 @@ impl<L, S: crate::Control> crate::Control for Layered<L, S> {
         self.inner.signal_return(task, mask)
     }
 
-    fn take_image(&self, task: crate::TaskId) -> Option<Vec<u8>> {
+    fn take_image(&self, task: crate::TaskId) -> Option<crate::Image> {
         self.inner.take_image(task)
     }
 
@@ -330,6 +330,7 @@ pub(crate) mod tests {
             "/// Wasm import `m.read` (riscv32 nr 63).",
             "use wasixv2_abi::{Cstr, Errno, Fd};",
             "use crate::{caller::Caller, memory::UserSliceMut, result::SysResult};",
+            "fn take_image(&self, task: crate::TaskId) -> Option<crate::Image> {",
         ] {
             assert!(out.contains(want), "missing `{want}` in:\n{out}");
         }
