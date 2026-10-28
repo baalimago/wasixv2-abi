@@ -21,6 +21,7 @@ const LOCAL_ITEMS: &[&str] = &[
     "FunctionEnv",
     "GuestMemory",
     "Imports",
+    "Module",
     "RuntimeError",
     "Store",
     "Syscalls",
@@ -76,7 +77,7 @@ impl Gen<'_> {
         );
         let _ = writeln!(self.out, "use wasixv2_syscalls::{{{}}};", items.join(", "));
         self.line(
-            "use wasmer::{AsyncFunctionEnvMut, Function, FunctionEnv, Imports, RuntimeError, Store};",
+            "use wasmer::{AsyncFunctionEnvMut, Function, FunctionEnv, Imports, Module, RuntimeError, Store};",
         );
         self.line("");
         self.line("use crate::{ExecEnv, memory::GuestMemory, return_to_guest};");
@@ -89,18 +90,32 @@ impl Gen<'_> {
     fn imports(&mut self, methods: &[Method]) {
         self.line("");
         self.line(
-            "pub(crate) fn imports<S>(store: &mut Store, env: &FunctionEnv<ExecEnv<S>>) -> Imports",
+            "/// The functions of [`IMPORT_MODULE`] that `module` imports, for an instance whose environment",
+        );
+        self.line(
+            "/// is `env`. Only those: every instance (each thread, each image) defines its own. An import",
+        );
+        self.line("/// no syscall answers to stays undefined, and the module fails to link.");
+        self.line(
+            "pub(crate) fn imports<S>(store: &mut Store, env: &FunctionEnv<ExecEnv<S>>, module: &Module) -> Imports",
         );
         self.line("where S: Syscalls + Control + Send + Sync + 'static,");
         self.line("{");
         self.line("let mut imports = Imports::new();");
+        self.line("for import in module.imports().functions() {");
+        self.line("if import.module() != IMPORT_MODULE { continue; }");
+        self.line("let function = match import.name() {");
         for m in methods {
             let _ = writeln!(
                 self.out,
-                "imports.define(IMPORT_MODULE, \"{}\", Function::new_typed_with_env_async(store, env, {}::<S>));",
+                "\"{}\" => Function::new_typed_with_env_async(store, env, {}::<S>),",
                 m.f.import_name, m.name
             );
         }
+        self.line("_ => continue,");
+        self.line("};");
+        self.line("imports.define(IMPORT_MODULE, import.name(), function);");
+        self.line("}");
         self.line("imports");
         self.line("}");
     }
@@ -216,7 +231,11 @@ mod tests {
         .unwrap();
         for want in [
             "pub const IMPORT_MODULE: &str = \"m\";",
-            "imports.define(IMPORT_MODULE, \"exit_group\", Function::new_typed_with_env_async(store, env, exit_group::<S>));",
+            "pub(crate) fn imports<S>(store: &mut Store, env: &FunctionEnv<ExecEnv<S>>, module: &Module) -> Imports",
+            "if import.module() != IMPORT_MODULE { continue; }",
+            "\"exit_group\" => Function::new_typed_with_env_async(store, env, exit_group::<S>),",
+            "_ => continue,",
+            "imports.define(IMPORT_MODULE, import.name(), function);",
             "async fn read<S>(env: AsyncFunctionEnvMut<ExecEnv<S>>, fd: i32, buf: i32, count: i32) -> Result<i32, RuntimeError>",
             "let ret = Syscalls::read(&*syscalls, &caller, Fd(fd), UserSliceMut::new(buf as u32, count as u32)).await;",
             "if let Some(ret) = return_to_guest(&env, &*syscalls, task, ret.map(|v| v as i32)).await { return ret; }",
@@ -228,6 +247,7 @@ mod tests {
             "async fn lseek<S>(env: AsyncFunctionEnvMut<ExecEnv<S>>, fd: i32, offset: i64, whence: i32) -> Result<i64, RuntimeError>",
             "use wasixv2_abi::{Cstr, Fd};",
             "use wasixv2_syscalls::{Caller, Control, Syscalls, TaskId, UserSliceMut};",
+            "use wasmer::{AsyncFunctionEnvMut, Function, FunctionEnv, Imports, Module, RuntimeError, Store};",
         ] {
             assert!(out.contains(want), "missing `{want}` in:\n{out}");
         }

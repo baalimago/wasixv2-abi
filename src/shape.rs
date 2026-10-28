@@ -11,7 +11,15 @@ use crate::rust::{Namespace, cast, ident, prim, ty, type_name};
 
 /// Locals and free functions of the generated code that params and methods must not shadow.
 const RESERVED_PARAMS: &[&str] = &["call", "caller", "env", "memory", "ret", "syscalls", "task"];
-const RESERVED_METHODS: &[&str] = &["caller_parts", "dispatch", "imports", "mismatch"];
+const RESERVED_METHODS: &[&str] = &[
+    "caller_parts",
+    "dispatch",
+    "function",
+    "import",
+    "imports",
+    "mismatch",
+    "module",
+];
 
 /// One import as a `Syscalls` method.
 pub struct Method<'a> {
