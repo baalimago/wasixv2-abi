@@ -6022,9 +6022,9 @@ interface types {
     ws-ypixel: u16,
   }
 
-  /// `ioctl` requests for terminals, sockets, timerfd and namespace files
+  /// `ioctl` requests for terminals, sockets, timerfd, namespace files and pidfds
   /// (`asm-generic/ioctls.h`, `asm-generic/sockios.h`, `linux/sockios.h`, `linux/timerfd.h`,
-  /// `linux/nsfs.h`).
+  /// `linux/nsfs.h`, `linux/pidfd.h`).
   /// @repr(u32)
   /// @c(unsigned)
   enum ioctl-request {
@@ -6350,6 +6350,12 @@ interface types {
     tiocgexcl,
     /// @value(0x802c542a)
     tcgets2,
+    /// `_IOWR(PIDFS_IOCTL_MAGIC, 11, struct pidfd_info)` with the 88-byte `pidfd-info`
+    /// (`PIDFD_INFO_SIZE_VER3`). It is an extensible request: the kernel takes the same type and
+    /// number with any size from `PIDFD_INFO_SIZE_VER0` on, and fills as much of the caller's
+    /// structure as both know.
+    /// @value(0xc058ff0b)
+    pidfd-get-info,
   }
 
   /// `_IOC_TYPE` bytes of ioctl request families.
@@ -6357,6 +6363,73 @@ interface types {
   enum ioctl-type {
     /// @value(138)
     epoll-ioc-type,
+    /// pidfd requests (`linux/pidfd.h`).
+    /// @value(255)
+    pidfs-ioctl-magic,
+  }
+
+  /// What `PIDFD_GET_INFO` fills of a process (`struct pidfd_info`, UAPI `linux/pidfd.h`).
+  /// `mask` asks for fields on the way in, and says which were filled on the way out
+  /// (`pidfd-info-mask`).
+  /// @kernel-only
+  /// @size(88)
+  /// @align(8)
+  record pidfd-info {
+    mask: u64,
+    cgroupid: u64,
+    pid: u32,
+    tgid: u32,
+    ppid: u32,
+    ruid: u32,
+    rgid: u32,
+    euid: u32,
+    egid: u32,
+    suid: u32,
+    sgid: u32,
+    fsuid: u32,
+    fsgid: u32,
+    /// The wait status the process exited with (`PIDFD_INFO_EXIT`).
+    exit-code: s32,
+    coredump-mask: u32,
+    coredump-signal: u32,
+    coredump-code: u32,
+    coredump-pad: u32,
+    /// The `pidfd-info-mask` flags the kernel knows (`PIDFD_INFO_SUPPORTED_MASK`).
+    supported-mask: u64,
+  }
+
+  /// `pidfd_info.mask` (`PIDFD_INFO_*`, UAPI `linux/pidfd.h`).
+  /// @repr(u64)
+  flags pidfd-info-mask {
+    /// @value(0x1)
+    pidfd-info-pid,
+    /// @value(0x2)
+    pidfd-info-creds,
+    /// @value(0x4)
+    pidfd-info-cgroupid,
+    /// @value(0x8)
+    pidfd-info-exit,
+    /// @value(0x10)
+    pidfd-info-coredump,
+    /// @value(0x20)
+    pidfd-info-supported-mask,
+    /// @value(0x40)
+    pidfd-info-coredump-signal,
+    /// @value(0x80)
+    pidfd-info-coredump-code,
+  }
+
+  /// The sizes `struct pidfd_info` had (`PIDFD_INFO_SIZE_VER*`, UAPI `linux/pidfd.h`).
+  /// @repr(u32)
+  enum pidfd-info-size {
+    /// @value(64)
+    pidfd-info-size-ver0,
+    /// @value(72)
+    pidfd-info-size-ver1,
+    /// @value(80)
+    pidfd-info-size-ver2,
+    /// @value(88)
+    pidfd-info-size-ver3,
   }
 
   /// `termios.c_iflag` (`asm-generic/termbits*.h`).
