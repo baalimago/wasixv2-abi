@@ -4,7 +4,7 @@
 /// extensions they do not implement yet.
 /// @module(wasixv2)
 interface ext {
-  use types.{buf, call-dynamic-flags, const-buf, const-stack-snapshot-ptr, cstr, dl-flags, dl-handle, dl-handle-ptr, reflection-result-ptr, s32-ptr, stack-snapshot-ptr, u32-ptr, u64-ptr, ulong, uptr, uptr-ptr, slong, usize};
+  use types.{buf, call-dynamic-flags, const-buf, const-spawn-attr-ptr, const-spawn-file-action-array, cstr-array, const-stack-snapshot-ptr, cstr, dl-flags, dl-handle, dl-handle-ptr, reflection-result-ptr, s32-ptr, stack-snapshot-ptr, u32-ptr, u64-ptr, ulong, uptr, uptr-ptr, slong, usize};
 
   // ==== Process startup ====
 
@@ -54,6 +54,32 @@ interface ext {
   /// that returns from it or traps ends its thread group, as a fault does. Returns the new
   /// task's id (a new process's pid) as the caller sees it, or `-errno`.
   thread-spawn: func(%flags: ulong, start-arg: uptr, parent-tid: s32-ptr, tls: uptr, child-tid: s32-ptr) -> slong;
+
+  // ==== Processes ====
+
+  /// `posix_spawn` in one call, for guests that cannot use `vfork`: their parent cannot resume
+  /// at a vfork point, because they have no wasm exceptions to unwind to it with (Go). The host
+  /// does what musl's `posix_spawn` child does, as a vfork child of the caller sharing its
+  /// memory: applies `attr` (NULL for none) in the order `POSIX_SPAWN_RESETIDS`,
+  /// `POSIX_SPAWN_SETSID`, `POSIX_SPAWN_SETPGROUP`, `POSIX_SPAWN_SETSIGDEF`,
+  /// `POSIX_SPAWN_SETSIGMASK`; runs the `actions-len` entries of `actions` in order; then
+  /// `execve(path, argv, envp)`, which does not search `PATH`. The child starts with the
+  /// caller's signal mask and handlers until then, as a vfork child does, and `execve` resets
+  /// the handled signals.
+  ///
+  /// On success, writes the child's pid to `pid` and returns 0 once its `execve` succeeded. If a
+  /// step fails, the child exits with status 127 and is reaped, and the call returns `-errno` of
+  /// that step, as glibc's and musl's `posix_spawn` return it; `pid` is not written. Unknown
+  /// `spawn-flags` or file action commands are `-EINVAL`.
+  spawn: func(
+    pid: s32-ptr,
+    path: cstr,
+    actions: const-spawn-file-action-array,
+    actions-len: u32,
+    attr: const-spawn-attr-ptr,
+    argv: cstr-array,
+    envp: cstr-array,
+  ) -> slong;
 
   // ==== Signals ====
 

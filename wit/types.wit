@@ -9308,4 +9308,77 @@ interface types {
 
   /// @ptr(const stack-snapshot)
   type const-stack-snapshot-ptr = uptr;
+
+  // ==== Processes (wasixv2 extensions) ====
+
+  /// `spawn` attributes, the fields of `posix_spawnattr_t` the kernel acts on.
+  /// @kernel-only
+  /// @size(24)
+  /// @align(4)
+  record spawn-attr {
+    /// `spawn-flags` bits: which of the other fields apply.
+    %flags: spawn-flags,
+    /// The process group to join with `POSIX_SPAWN_SETPGROUP`; 0 makes a new one.
+    pgroup: pid,
+    /// The child's signal mask, with `POSIX_SPAWN_SETSIGMASK`.
+    sigmask: sigset,
+    /// The signals whose action the child resets to `SIG_DFL`, with `POSIX_SPAWN_SETSIGDEF`.
+    sigdefault: sigset,
+  }
+
+  /// @ptr(const spawn-attr)
+  type const-spawn-attr-ptr = uptr;
+
+  /// `posix_spawnattr_setflags` flags (`spawn.h`), with musl's values. C
+  /// passes them as `short`; the import takes them widened.
+  /// @repr(u32)
+  flags spawn-flags {
+    /// @value(0x1)
+    posix-spawn-resetids,
+    /// @value(0x2)
+    posix-spawn-setpgroup,
+    /// @value(0x4)
+    posix-spawn-setsigdef,
+    /// @value(0x8)
+    posix-spawn-setsigmask,
+    /// @value(0x80)
+    posix-spawn-setsid,
+  }
+
+  /// What a `spawn-file-action` does, as the `posix_spawn_file_actions_add*` call that adds it.
+  /// @repr(u32)
+  enum spawn-file-action-cmd {
+    /// `close(fd)`; a failure is ignored, as musl's child ignores it.
+    /// @value(1)
+    spawn-fdop-close,
+    /// `dup2(src-fd, fd)`. With `src-fd` equal to `fd`, clears `FD_CLOEXEC` on `fd` instead.
+    /// @value(2)
+    spawn-fdop-dup2,
+    /// `open(path, oflag, mode)` onto `fd`.
+    /// @value(3)
+    spawn-fdop-open,
+    /// `chdir(path)`.
+    /// @value(4)
+    spawn-fdop-chdir,
+    /// `fchdir(fd)`.
+    /// @value(5)
+    spawn-fdop-fchdir,
+  }
+
+  /// One step a `spawn` child takes before `execve`, as a `posix_spawn_file_actions_t` entry.
+  /// Fields a command does not use are ignored.
+  /// @kernel-only
+  /// @size(24)
+  /// @align(4)
+  record spawn-file-action {
+    cmd: spawn-file-action-cmd,
+    fd: fd,
+    src-fd: fd,
+    oflag: open-flags,
+    mode: mode,
+    path: cstr,
+  }
+
+  /// @ptr(const spawn-file-action[])
+  type const-spawn-file-action-array = uptr;
 }
