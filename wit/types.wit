@@ -357,6 +357,9 @@ interface types {
   /// @ptr(const iovec[])
   type const-iovec-array = uptr;
 
+  /// @ptr(const sock-filter[])
+  type const-sock-filter-array = uptr;
+
   /// @ptr(mut xattr-args)
   type xattr-args-ptr = uptr;
 
@@ -4558,6 +4561,114 @@ interface types {
     /// musl (POSIX): `ipv6mr_interface`.
     /// @c-name(ipv6mr_interface)
     ipv6mr-ifindex: s32,
+  }
+
+  /// `IP_ADD_SOURCE_MEMBERSHIP`, `IP_DROP_SOURCE_MEMBERSHIP`, `IP_BLOCK_SOURCE` and
+  /// `IP_UNBLOCK_SOURCE` payload (`struct ip_mreq_source`).
+  /// @c(struct ip_mreq_source)
+  /// @size(12)
+  /// @align(4)
+  record ip-mreq-source {
+    imr-multiaddr: in-addr,
+    imr-interface: in-addr,
+    imr-sourceaddr: in-addr,
+  }
+
+  /// `IP_MSFILTER` payload (`struct ip_msfilter`): `imsf-numsrc` sources follow from offset 16
+  /// (`IP_MSFILTER_SIZE`); the kernel's flexible array shares `imsf-slist`'s place.
+  /// @c(struct ip_msfilter)
+  /// @size(20)
+  /// @align(4)
+  record ip-msfilter {
+    imsf-multiaddr: in-addr,
+    imsf-interface: in-addr,
+    /// `MCAST_INCLUDE` (1) or `MCAST_EXCLUDE` (0).
+    imsf-fmode: u32,
+    imsf-numsrc: u32,
+    imsf-slist: list<in-addr, 1>,
+  }
+
+  /// `MCAST_JOIN_GROUP`/`MCAST_LEAVE_GROUP` payload (`struct group_req`).
+  /// @c(struct group_req)
+  /// @size(132)
+  /// @align(4)
+  record group-req {
+    gr-interface: u32,
+    gr-group: sockaddr-storage,
+  }
+
+  /// `MCAST_JOIN_SOURCE_GROUP`, `MCAST_LEAVE_SOURCE_GROUP`, `MCAST_BLOCK_SOURCE` and
+  /// `MCAST_UNBLOCK_SOURCE` payload (`struct group_source_req`).
+  /// @c(struct group_source_req)
+  /// @size(260)
+  /// @align(4)
+  record group-source-req {
+    gsr-interface: u32,
+    gsr-group: sockaddr-storage,
+    gsr-source: sockaddr-storage,
+  }
+
+  /// `MCAST_MSFILTER` payload (`struct group_filter`): `gf-numsrc` sources follow from offset
+  /// 140 (`GROUP_FILTER_SIZE`); the kernel's flexible array shares `gf-slist`'s place.
+  /// @c(struct group_filter)
+  /// @size(268)
+  /// @align(4)
+  record group-filter {
+    gf-interface: u32,
+    gf-group: sockaddr-storage,
+    /// `MCAST_INCLUDE` (1) or `MCAST_EXCLUDE` (0).
+    gf-fmode: u32,
+    gf-numsrc: u32,
+    gf-slist: list<sockaddr-storage, 1>,
+  }
+
+  /// `IP_PKTINFO` control message and option payload (`struct in_pktinfo`).
+  /// @c(struct in_pktinfo)
+  /// @size(12)
+  /// @align(4)
+  record in-pktinfo {
+    ipi-ifindex: s32,
+    ipi-spec-dst: in-addr,
+    ipi-addr: in-addr,
+  }
+
+  /// `IPV6_PKTINFO` control message and option payload (`struct in6_pktinfo`).
+  /// @c(struct in6_pktinfo)
+  /// @size(20)
+  /// @align(4)
+  record in6-pktinfo {
+    ipi6-addr: in6-addr,
+    ipi6-ifindex: s32,
+  }
+
+  /// `IPV6_PATHMTU` control message and option payload (`struct ip6_mtuinfo`).
+  /// @c(struct ip6_mtuinfo)
+  /// @size(32)
+  /// @align(4)
+  record ip6-mtuinfo {
+    ip6m-addr: sockaddr-in6,
+    ip6m-mtu: u32,
+  }
+
+  /// One classic BPF instruction (`struct sock_filter`, UAPI `linux/filter.h`).
+  /// @kernel-only
+  /// @size(8)
+  /// @align(4)
+  record sock-filter {
+    code: u16,
+    jt: u8,
+    jf: u8,
+    k: u32,
+  }
+
+  /// `SO_ATTACH_FILTER`/`SO_ATTACH_REUSEPORT_CBPF` payload (`struct sock_fprog`, UAPI
+  /// `linux/filter.h`): `len` instructions at `filter`.
+  /// @kernel-only
+  /// @size(8)
+  /// @align(4)
+  record sock-fprog {
+    len: u16,
+    filter: const-sock-filter-array,
   }
 
   /// An error-queue entry (`struct sock_extended_err`, UAPI `linux/errqueue.h`): the payload of

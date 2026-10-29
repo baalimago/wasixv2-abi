@@ -373,6 +373,47 @@ __WXV2_LAYOUT(struct ipv6_mreq, 20, 4);
 __WXV2_OFFSET(struct ipv6_mreq, ipv6mr_multiaddr, 0);
 __WXV2_OFFSET(struct ipv6_mreq, ipv6mr_interface, 16);
 
+__WXV2_LAYOUT(struct ip_mreq_source, 12, 4);
+__WXV2_OFFSET(struct ip_mreq_source, imr_multiaddr, 0);
+__WXV2_OFFSET(struct ip_mreq_source, imr_interface, 4);
+__WXV2_OFFSET(struct ip_mreq_source, imr_sourceaddr, 8);
+
+__WXV2_LAYOUT(struct ip_msfilter, 20, 4);
+__WXV2_OFFSET(struct ip_msfilter, imsf_multiaddr, 0);
+__WXV2_OFFSET(struct ip_msfilter, imsf_interface, 4);
+__WXV2_OFFSET(struct ip_msfilter, imsf_fmode, 8);
+__WXV2_OFFSET(struct ip_msfilter, imsf_numsrc, 12);
+__WXV2_OFFSET(struct ip_msfilter, imsf_slist, 16);
+
+__WXV2_LAYOUT(struct group_req, 132, 4);
+__WXV2_OFFSET(struct group_req, gr_interface, 0);
+__WXV2_OFFSET(struct group_req, gr_group, 4);
+
+__WXV2_LAYOUT(struct group_source_req, 260, 4);
+__WXV2_OFFSET(struct group_source_req, gsr_interface, 0);
+__WXV2_OFFSET(struct group_source_req, gsr_group, 4);
+__WXV2_OFFSET(struct group_source_req, gsr_source, 132);
+
+__WXV2_LAYOUT(struct group_filter, 268, 4);
+__WXV2_OFFSET(struct group_filter, gf_interface, 0);
+__WXV2_OFFSET(struct group_filter, gf_group, 4);
+__WXV2_OFFSET(struct group_filter, gf_fmode, 132);
+__WXV2_OFFSET(struct group_filter, gf_numsrc, 136);
+__WXV2_OFFSET(struct group_filter, gf_slist, 140);
+
+__WXV2_LAYOUT(struct in_pktinfo, 12, 4);
+__WXV2_OFFSET(struct in_pktinfo, ipi_ifindex, 0);
+__WXV2_OFFSET(struct in_pktinfo, ipi_spec_dst, 4);
+__WXV2_OFFSET(struct in_pktinfo, ipi_addr, 8);
+
+__WXV2_LAYOUT(struct in6_pktinfo, 20, 4);
+__WXV2_OFFSET(struct in6_pktinfo, ipi6_addr, 0);
+__WXV2_OFFSET(struct in6_pktinfo, ipi6_ifindex, 16);
+
+__WXV2_LAYOUT(struct ip6_mtuinfo, 32, 4);
+__WXV2_OFFSET(struct ip6_mtuinfo, ip6m_addr, 0);
+__WXV2_OFFSET(struct ip6_mtuinfo, ip6m_mtu, 28);
+
 __WXV2_LAYOUT(struct ipc_perm, 36, 4);
 __WXV2_OFFSET(struct ipc_perm, key, 0);
 __WXV2_OFFSET(struct ipc_perm, uid, 4);
