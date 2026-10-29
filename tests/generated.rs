@@ -1,11 +1,11 @@
-//! Golden checks for generated Rust and C, plus a compile-and-run check of the fixture output.
+//! Golden checks for generated Rust, C and Go, plus a compile-and-run check of the fixture output.
 //! Consumers check their own generated files (wasmer: `lib/wasixv2/abi/tests/generated.rs`).
 //!
 //! Set `WASIXV2_CODEGEN_BLESS=1` to rewrite the golden files.
 
 use std::path::{Path, PathBuf};
 
-use wasixv2_codegen::{Target, generate_abi, generate_c};
+use wasixv2_codegen::{GeneratedFile, Target, generate_abi, generate_c, generate_go};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -18,6 +18,8 @@ const GOLDEN_C: &str = "tests/golden/sample_c";
 const WIT: &str = "wit";
 /// Mirrors the libc2 tree layout.
 const GOLDEN_WASIXV2_C: &str = "tests/golden/wasixv2_c";
+/// Mirrors the GOROOT layout.
+const GOLDEN_WASIXV2_GO: &str = "tests/golden/wasixv2_go";
 
 fn bless() -> bool {
     std::env::var_os("WASIXV2_CODEGEN_BLESS").is_some()
@@ -43,6 +45,13 @@ fn fixture_c_golden_is_up_to_date() {
     check_c_golden(FIXTURE, GOLDEN_C);
 }
 
+/// Snapshot of the Go glue for the real definitions, as for C.
+#[test]
+fn wasixv2_go_golden_is_up_to_date() {
+    let files = generate_go(&repo_root().join(WIT)).unwrap();
+    check_files_golden(&files, GOLDEN_WASIXV2_GO);
+}
+
 /// Snapshot of the C glue for the real definitions, so a WIT change shows up in review as a libc2
 /// diff even without a libc2 checkout.
 #[test]
@@ -50,14 +59,17 @@ fn wasixv2_c_golden_is_up_to_date() {
     check_c_golden(WIT, GOLDEN_WASIXV2_C);
 }
 
+fn check_c_golden(wit: &str, golden_dir: &str) {
+    let files = generate_c(&repo_root().join(wit), Target::WASM32).unwrap();
+    check_files_golden(&files, golden_dir);
+}
+
 /// Compares (or with `WASIXV2_CODEGEN_BLESS`, rewrites) every generated file under `golden_dir`,
 /// and rejects files there that the generator no longer produces.
-fn check_c_golden(wit: &str, golden_dir: &str) {
-    let root = repo_root();
-    let dir = root.join(golden_dir);
+fn check_files_golden(files: &[GeneratedFile], golden_dir: &str) {
+    let dir = repo_root().join(golden_dir);
     let bless = bless();
-    let files = generate_c(&root.join(wit), Target::WASM32).unwrap();
-    for file in &files {
+    for file in files {
         let path = dir.join(file.path);
         if bless {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();

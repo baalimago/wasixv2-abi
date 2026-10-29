@@ -6,9 +6,10 @@ bindings.
 - `wit/`: the ABI, written as annotated WIT. [`wit/README.md`](wit/README.md) describes the
   conventions and every annotation.
 - `src/`: `wasixv2-codegen`, which reads the WIT and generates the host-side Rust (the ABI types,
-  the `Syscalls` trait and the wasm import shims) and the musl C glue.
-- `tests/`: golden tests for the generator, including a snapshot of the C glue for the real ABI,
-  so that an ABI change shows up in review as a C diff.
+  the `Syscalls` trait and the wasm import shims), the musl C glue and the syscall glue of Go's
+  `wasix/wasm` port.
+- `tests/`: golden tests for the generator, including snapshots of the C and Go glue for the real
+  ABI, so that an ABI change shows up in review as a C and Go diff.
 
 This repository is a git submodule of its consumers. Generated code is committed in the
 consumers, never here:
@@ -17,6 +18,8 @@ consumers, never here:
   member of the cargo workspace. wasmer's `lib/wasixv2/abi/tests/generated.rs` checks that its
   generated crates match the WIT at the pinned commit.
 - [libc2](https://github.com/wasix-org/libc2) mounts it at `wasixv2/abi`.
+- Go's `wasix/wasm` port ([wasix-org/go](https://github.com/wasix-org/go)) commits the generated
+  `zsyscall_wasix_wasm.go` and `zsysnum_wasix_wasm.go`; it does not mount this repository.
 
 ## Changing the ABI
 
@@ -34,6 +37,12 @@ From a libc2 checkout:
 
 ```sh
 cargo run --manifest-path wasixv2/abi/Cargo.toml -- c --wit wasixv2/abi/wit --libc .
+```
+
+From this repository, for a Go checkout:
+
+```sh
+cargo run -- go --wit wit --goroot <go>
 ```
 
 Here, `cargo test` runs the generator's own tests, and `WASIXV2_CODEGEN_BLESS=1 cargo test`

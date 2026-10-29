@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use wasixv2_codegen::Target;
+use wasixv2_codegen::{GeneratedFile, Target};
 
 /// Generates wasixv2 bindings from the annotated WIT definitions.
 ///
@@ -46,6 +46,19 @@ enum Cmd {
         #[arg(long, group = "dest")]
         out_dir: Option<PathBuf>,
     },
+    /// Generate the Go `wasix/wasm` syscall glue.
+    #[command(group(clap::ArgGroup::new("dest").required(true)))]
+    Go {
+        /// WIT file or directory.
+        #[arg(long)]
+        wit: PathBuf,
+        /// GOROOT of a Go checkout with the wasix port: overwrites the generated files in place.
+        #[arg(long, group = "dest")]
+        goroot: Option<PathBuf>,
+        /// Directory to write the files to, mirroring the GOROOT layout.
+        #[arg(long, group = "dest")]
+        out_dir: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -55,29 +68,62 @@ fn main() -> Result<()> {
         Cmd::Exec(args) => write_rust(args, wasixv2_codegen::generate_exec),
         Cmd::C { wit, libc, out_dir } => {
             let files = wasixv2_codegen::generate_c(&wit, Target::WASM32)?;
-            let (root, create) = match (libc, out_dir) {
-                (Some(libc), _) => {
-                    // Catch a wrong path before scattering files into it.
-                    if !libc.join("arch/wasm32/syscall_arch.h").is_file() {
-                        bail!("{} does not look like a libc2 checkout", libc.display());
-                    }
-                    (libc, false)
-                }
-                (None, Some(dir)) => (dir, true),
-                (None, None) => unreachable!("clap requires one destination"),
-            };
-            for f in files {
-                let path = root.join(f.path);
-                if create && let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .with_context(|| format!("creating {}", parent.display()))?;
-                }
-                std::fs::write(&path, f.contents)
-                    .with_context(|| format!("writing {}", path.display()))?;
-            }
-            Ok(())
+            let dest = Dest::new(libc, out_dir, "libc2", "arch/wasm32/syscall_arch.h")?;
+            write_files(dest, files)
+        }
+        Cmd::Go {
+            wit,
+            goroot,
+            out_dir,
+        } => {
+            let files = wasixv2_codegen::generate_go(&wit)?;
+            let marker = "src/internal/runtime/syscall/linux/syscall_wasix_wasm.go";
+            write_files(Dest::new(goroot, out_dir, "Go wasix", marker)?, files)
         }
     }
+}
+
+/// Where a consumer's files go: its checkout, or a directory mirroring its layout.
+enum Dest {
+    Checkout(PathBuf),
+    OutDir(PathBuf),
+}
+
+impl Dest {
+    fn new(
+        checkout: Option<PathBuf>,
+        out_dir: Option<PathBuf>,
+        what: &str,
+        marker: &str,
+    ) -> Result<Self> {
+        match (checkout, out_dir) {
+            (Some(root), _) => {
+                // Catch a wrong path before scattering files into it.
+                if !root.join(marker).is_file() {
+                    bail!("{} does not look like a {what} checkout", root.display());
+                }
+                Ok(Dest::Checkout(root))
+            }
+            (None, Some(dir)) => Ok(Dest::OutDir(dir)),
+            (None, None) => unreachable!("clap requires one destination"),
+        }
+    }
+}
+
+fn write_files(dest: Dest, files: Vec<GeneratedFile>) -> Result<()> {
+    let (root, create) = match dest {
+        Dest::Checkout(root) => (root, false),
+        Dest::OutDir(dir) => (dir, true),
+    };
+    for f in files {
+        let path = root.join(f.path);
+        if create && let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
+        }
+        std::fs::write(&path, f.contents).with_context(|| format!("writing {}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn write_rust(args: RustArgs, generate: fn(&Path, &str, Target) -> Result<String>) -> Result<()> {

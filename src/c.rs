@@ -11,6 +11,8 @@ use std::fmt::Write as _;
 
 use anyhow::{Result, bail};
 
+use crate::GeneratedFile;
+
 use crate::ir::{
     ConstKind, Constant, Constants, Function, Model, Param, Prim, SplitOrder, Target, TyRef,
     TypeDef, TypeKind, names,
@@ -88,12 +90,6 @@ const ASSERT_HEADERS: &[&str] = &[
 /// Internal musl headers, included for the `@c` types and constants they define
 /// (`FUTEX_*`, `IPC_64`).
 const INTERNAL_HEADERS: &[&str] = &["futex.h", "ksigaction.h", "syscall.h"];
-
-pub struct GeneratedFile {
-    /// Path relative to the libc2 root.
-    pub path: &'static str,
-    pub contents: String,
-}
 
 /// Generates the four libc2 files, in a fixed order.
 pub fn generate(model: &Model) -> Result<Vec<GeneratedFile>> {
